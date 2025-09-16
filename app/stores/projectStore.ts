@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { Project } from '../types/project';
 
 interface ProjectState {
@@ -55,28 +56,41 @@ const mockProjects: Project[] = [
   }
 ];
 
-export const useProjectStore = create<ProjectState>((set, get) => ({
-  projects: [],
-  isLoading: false,
-  error: null,
+export const useProjectStore = create<ProjectState>()(
+  persist(
+    (set, get) => ({
+      projects: [],
+      isLoading: false,
+      error: null,
 
-  fetchProjects: async (userId: string) => {
-    set({ isLoading: true, error: null });
-    
-    try {
-      // Simula uma chamada de API
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Filtra projetos do usuário (mock)
-      const userProjects = mockProjects.filter(project => project.userId === userId);
-      set({ projects: userProjects, isLoading: false });
-    } catch (error) {
-      set({ 
-        error: 'Erro ao carregar projetos', 
-        isLoading: false 
-      });
-    }
-  },
+      fetchProjects: async (userId: string) => {
+        set({ isLoading: true, error: null });
+        
+        try {
+          // Simula uma chamada de API
+          await new Promise(resolve => setTimeout(resolve, 800));
+          
+          // Se não há projetos salvos, usa os dados mock
+          const currentProjects = get().projects;
+          if (currentProjects.length === 0) {
+            // Atribui os projetos mock ao usuário logado
+            const userProjects = mockProjects.map(project => ({
+              ...project,
+              userId: userId
+            }));
+            set({ projects: userProjects, isLoading: false });
+          } else {
+            // Filtra projetos do usuário das tarefas salvas
+            const userProjects = currentProjects.filter(project => project.userId === userId);
+            set({ projects: userProjects, isLoading: false });
+          }
+        } catch (error) {
+          set({ 
+            error: 'Erro ao carregar projetos', 
+            isLoading: false 
+          });
+        }
+      },
 
   addProject: (projectData) => {
     const newProject: Project = {
@@ -106,4 +120,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       projects: state.projects.filter(project => project.id !== id)
     }));
   }
-}));
+    }),
+    {
+      name: 'taskflow-projects',
+      partialize: (state) => ({ projects: state.projects }),
+    }
+  )
+);

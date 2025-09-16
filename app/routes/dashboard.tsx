@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { useProjectStore } from "../stores/projectStore";
+import { ProjectModal } from "../components/ProjectModal";
 import type { Project } from "../types/project";
 import type { Route } from "./+types/dashboard";
 
@@ -12,7 +13,15 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-function ProjectCard({ project }: { project: Project }) {
+function ProjectCard({ 
+  project, 
+  onEdit, 
+  onDelete 
+}: { 
+  project: Project;
+  onEdit: (project: Project) => void;
+  onDelete: (projectId: string) => void;
+}) {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR', {
       day: '2-digit',
@@ -27,9 +36,35 @@ function ProjectCard({ project }: { project: Project }) {
         <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
           {project.name}
         </h3>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          {formatDate(project.updatedAt)}
-        </span>
+        <div className="flex items-center space-x-2">
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            {formatDate(project.updatedAt)}
+          </span>
+          <div className="flex space-x-1">
+            <button
+              onClick={() => onEdit(project)}
+              className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+              title="Editar projeto"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => {
+                if (confirm('Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita.')) {
+                  onDelete(project.id);
+                }
+              }}
+              className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400"
+              title="Excluir projeto"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
       
       <p className="text-gray-600 dark:text-gray-300 mb-4 line-clamp-2">
@@ -53,13 +88,34 @@ function ProjectCard({ project }: { project: Project }) {
 
 function DashboardContent() {
   const { user } = useAuth();
-  const { projects, isLoading, error, fetchProjects } = useProjectStore();
+  const { projects, isLoading, error, fetchProjects, deleteProject } = useProjectStore();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
 
   useEffect(() => {
     if (user?.id) {
       fetchProjects(user.id);
     }
   }, [user?.id, fetchProjects]);
+
+  const handleCreateProject = () => {
+    setEditingProject(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEditProject = (project: Project) => {
+    setEditingProject(project);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteProject = (projectId: string) => {
+    deleteProject(projectId);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingProject(null);
+  };
 
   if (isLoading) {
     return (
@@ -96,7 +152,10 @@ function DashboardContent() {
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
             Meus Projetos ({projects.length})
           </h2>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition duration-200">
+          <button 
+            onClick={handleCreateProject}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition duration-200"
+          >
             + Novo Projeto
           </button>
         </div>
@@ -114,18 +173,33 @@ function DashboardContent() {
             <p className="text-gray-600 dark:text-gray-300 mb-4">
               Comece criando seu primeiro projeto
             </p>
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md font-medium transition duration-200">
+            <button 
+              onClick={handleCreateProject}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md font-medium transition duration-200"
+            >
               Criar Projeto
             </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
+              <ProjectCard 
+                key={project.id} 
+                project={project} 
+                onEdit={handleEditProject}
+                onDelete={handleDeleteProject}
+              />
             ))}
           </div>
         )}
       </div>
+
+      <ProjectModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        project={editingProject}
+        userId={user?.id || ''}
+      />
     </div>
   );
 }

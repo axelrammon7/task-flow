@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { Task } from '../types/task';
 
 interface TaskState {
@@ -9,6 +10,7 @@ interface TaskState {
   addTask: (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateTask: (id: string, updates: Partial<Task>) => void;
   moveTask: (taskId: string, newStatus: Task['status']) => void;
+  reorderTasks: (taskId: string, newStatus: Task['status'], newIndex: number) => void;
   deleteTask: (id: string) => void;
 }
 
@@ -104,28 +106,36 @@ const mockTasks: Task[] = [
   }
 ];
 
-export const useTaskStore = create<TaskState>((set, get) => ({
-  tasks: [],
-  isLoading: false,
-  error: null,
+export const useTaskStore = create<TaskState>()(
+  persist(
+    (set, get) => ({
+      tasks: [],
+      isLoading: false,
+      error: null,
 
-  fetchTasks: async (projectId: string) => {
-    set({ isLoading: true, error: null });
-    
-    try {
-      // Simula uma chamada de API
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Filtra tarefas do projeto (mock)
-      const projectTasks = mockTasks.filter(task => task.projectId === projectId);
-      set({ tasks: projectTasks, isLoading: false });
-    } catch (error) {
-      set({ 
-        error: 'Erro ao carregar tarefas', 
-        isLoading: false 
-      });
-    }
-  },
+      fetchTasks: async (projectId: string) => {
+        set({ isLoading: true, error: null });
+        
+        try {
+          // Simula uma chamada de API
+          await new Promise(resolve => setTimeout(resolve, 800));
+          
+          // Se não há tarefas salvas, usa os dados mock
+          const currentTasks = get().tasks;
+          if (currentTasks.length === 0) {
+            set({ tasks: mockTasks.filter(task => task.projectId === projectId), isLoading: false });
+          } else {
+            // Filtra tarefas do projeto das tarefas salvas
+            const projectTasks = currentTasks.filter(task => task.projectId === projectId);
+            set({ tasks: projectTasks, isLoading: false });
+          }
+        } catch (error) {
+          set({ 
+            error: 'Erro ao carregar tarefas', 
+            isLoading: false 
+          });
+        }
+      },
 
   addTask: (taskData) => {
     const newTask: Task = {
@@ -160,9 +170,37 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }));
   },
 
+  reorderTasks: (taskId, newStatus, newIndex) => {
+    set(state => {
+      const task = state.tasks.find(t => t.id === taskId);
+      if (!task) return state;
+
+      // Remove a tarefa da posição atual
+      const otherTasks = state.tasks.filter(t => t.id !== taskId);
+      
+      // Filtra tarefas da nova coluna
+      const targetColumnTasks = otherTasks.filter(t => t.status === newStatus);
+      const otherColumnTasks = otherTasks.filter(t => t.status !== newStatus);
+      
+      // Insere a tarefa na nova posição
+      const updatedTask = { ...task, status: newStatus, updatedAt: new Date().toISOString() };
+      targetColumnTasks.splice(newIndex, 0, updatedTask);
+      
+      return {
+        tasks: [...otherColumnTasks, ...targetColumnTasks]
+      };
+    });
+  },
+
   deleteTask: (id) => {
     set(state => ({
       tasks: state.tasks.filter(task => task.id !== id)
     }));
   }
-}));
+    }),
+    {
+      name: 'taskflow-tasks',
+      partialize: (state) => ({ tasks: state.tasks }),
+    }
+  )
+);
